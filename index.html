@@ -229,6 +229,22 @@
 <input type="file" id="fileIn" accept="image/*" capture="environment" style="display:none">
 
 <script>
+// ===== auto-updater: bump APP_BUILD on every release =====
+const APP_BUILD = 1;
+(function(){
+  try{
+    fetch(location.pathname + '?_=' + Date.now(), {cache:'no-store'})
+      .then(r=> r.ok ? r.text() : null)
+      .then(t=>{
+        if(!t) return;
+        const m = t.match(/APP_BUILD\s*=\s*(\d+)/);
+        if(!m) return;
+        const sb = +m[1], tried = +(sessionStorage.getItem('slog_upd')||0);
+        if(sb > APP_BUILD && sb > tried){ sessionStorage.setItem('slog_upd', sb); location.replace(location.pathname + '?v=' + sb); }
+      }).catch(()=>{});   // offline / no signal → run current version, no error
+  }catch(e){}
+})();
+
 // ===== workout definitions (ordered) =====
 const WORKOUTS = {
   "Volume Upper": { type:"amrap", lifts:["Bench","Assisted Pullups","Shoulder","Decline","Curl","Chest","Pec Fly","Triceps"] },
@@ -735,6 +751,7 @@ function drawChart(pts){
 
 // ===== boot =====
 loadDraft(current); buildTabs(); switchView();
+try{ document.getElementById('sub').innerHTML += ' · <span style="opacity:.55">v'+APP_BUILD+'</span>'; }catch(e){}
 </script>
 </body>
 </html>
