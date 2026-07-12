@@ -83,6 +83,8 @@
   .fld span { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; }
   .fld input { width:100%; text-align:center; font-size:18px; font-weight:600; }
   .fld.load input { text-align:left; }
+  .fld.reps input { color:var(--muted); }                                  /* default target = gray */
+  .fld.reps input:focus, .fld.reps input.touched { color:var(--fg); }      /* edited = solid */
   .amrap span { color:var(--pink); }
   .addrow { font-size:13px; color:var(--blue); cursor:pointer; padding:6px 0; display:inline-block; font-weight:600; }
   .btnbar { display:flex; gap:8px; margin-top:18px; position:sticky; bottom:0; padding:12px 0; background:linear-gradient(transparent, var(--bg) 34%); backdrop-filter:blur(2px); }
@@ -163,6 +165,7 @@
     <button data-r="busy">Machine busy</button>
     <button data-r="personal">Personal choice</button>
   </div>
+  <div class="dlg-btns"><button class="act ghost" id="reasonCancel">Cancel</button></div>
 </div></dialog>
 
 <!-- injury modal -->
@@ -311,8 +314,11 @@ function askReason(title, sub){
   return new Promise(res=>{
     $('reasonTitle').textContent=title; $('reasonSub').textContent=sub||'';
     const dlg=$('reasonDlg');
-    const h=e=>{ const b=e.target.closest('button[data-r]'); if(!b)return; dlg.removeEventListener('click',h); dlg.close(); res(b.dataset.r); };
-    dlg.addEventListener('click',h); dlg.showModal();
+    let done=false;
+    const finish=v=>{ if(done)return; done=true; dlg.removeEventListener('click',h); $('reasonCancel').removeEventListener('click',cancel); dlg.removeEventListener('close',cancel); dlg.close(); res(v); };
+    const h=e=>{ const b=e.target.closest('button[data-r]'); if(!b)return; finish(b.dataset.r); };
+    const cancel=()=>finish(null);
+    dlg.addEventListener('click',h); $('reasonCancel').addEventListener('click',cancel); dlg.addEventListener('close',cancel); dlg.showModal();
   });
 }
 function askInjury(name){
@@ -367,7 +373,7 @@ async function logNow(name){
     const e=names[i], el=draft.lifts[e]||{};
     if(!el.order && el.status!=='skipped' && !el.deferReason){
       const r=await askReason('Why before '+e+'?', 'You are logging '+name+' before '+e+' (slot #'+(i+1)+').');
-      L(e).deferReason=r;
+      if(r) L(e).deferReason=r;        // Cancel = don't tag it, just continue
     }
   }
   counter++; li.order=counter; li.status='done';
@@ -377,6 +383,7 @@ async function skipLift(name){
   const li=L(name);
   if(li.status==='skipped'){ li.status=undefined; li.skipReason=undefined; saveDraft(); render(); return; }
   const r=await askReason('Skip '+name+'?', 'Not doing it today.');
+  if(!r) return;                       // Cancel — leave the lift untouched
   li.status='skipped'; li.skipReason=r; li.order=undefined;
   saveDraft(); render();
 }
@@ -534,13 +541,16 @@ function heavyCard(name,i,prev){
   const f=document.createElement('div'); f.className='fields g-heavy';
   f.innerHTML=[1,2,3].map(n=>`
     <label class="fld"><span>set ${n} · load</span><input type="number" data-f="l${n}" inputmode="numeric" value="${li['l'+n]||''}"></label>
-    <label class="fld reps"><span>reps</span><input type="number" data-f="r${n}" inputmode="numeric" placeholder="${tgt}" value="${li['r'+n]||''}"></label>`).join('');
+    <label class="fld reps"><span>reps</span><input type="number" data-f="r${n}" inputmode="numeric" class="${li['r'+n]?'touched':''}" value="${li['r'+n]||tgt}"></label>`).join('');
   el.appendChild(f);
+  // reps pre-filled with target, shown gray/untouched; only persist + go solid once edited
+  [1,2,3].forEach(n=>{ const inp=f.querySelector('[data-f=r'+n+']'); inp.addEventListener('input',()=>{ li['r'+n]=inp.value.trim(); inp.classList.add('touched'); }); });
   const flag=el.querySelector('[data-flag]');
   const rc=()=>{
-    [1,2,3].forEach(n=>{ li['l'+n]=f.querySelector('[data-f=l'+n+']').value.trim(); li['r'+n]=f.querySelector('[data-f=r'+n+']').value.trim(); });
+    [1,2,3].forEach(n=>{ li['l'+n]=f.querySelector('[data-f=l'+n+']').value.trim(); });
     saveDraft();
-    const cur=e1rm(current,li), pe=(p&&!p.skipped)?e1rm(current,p):null;
+    const liN=Object.assign({},li); [1,2,3].forEach(n=>{ liN['r'+n]= li['r'+n] || f.querySelector('[data-f=r'+n+']').value.trim() || String(tgt); }); // untouched = target
+    const cur=e1rm(current,liN), pe=(p&&!p.skipped)?e1rm(current,p):null;
     setPerf(el, cur, pe, bestE);
     if(cur==null){ flag.className='flag hold'; flag.textContent=li.order?'#'+li.order:''; return; }
     if(pe==null){ flag.className='flag hold'; flag.textContent='logged'; return; }
