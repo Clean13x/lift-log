@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lift Log">
+<title>Strength Logger</title>
+<style>
+  :root {
+    color-scheme:dark;
+    --bg:#2b2f37; --bg2:#212429; --card:#363b44; --card2:#414750;
+    --fg:#f3f5f9; --muted:#a6aebc; --line:rgba(255,255,255,0.11);
+    --blue:#6aa4ff; --cyan:#3fe3d2; --green:#39d67f; --pink:#ff6fa0; --orange:#ffab5c; --red:#ff6b83; --gold:#ffcf5c;
+    --grad:linear-gradient(135deg,#6aa4ff 0%,#4785ff 100%);
+    --gradc:linear-gradient(135deg,#6aa4ff 0%,#3fe3d2 100%);
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  ::selection { background:rgba(106,164,255,0.35); }
+  body {
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    margin:0 auto; color:var(--fg); padding:1.1rem 0.8rem 5.5rem; max-width:620px;
+    background:var(--bg);
+    -webkit-font-smoothing:antialiased;
+  }
+  h1 {
+    font-size:23px; font-weight:800; letter-spacing:-0.02em; margin:0 0 3px;
+    background:var(--gradc); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .sub { font-size:12px; color:var(--muted); margin-bottom:16px; }
+  .tabs { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:16px; padding:4px; background:var(--card); border:1px solid var(--line); border-radius:14px; }
+  .tab { flex:1 1 auto; font-size:13px; font-weight:600; padding:11px 10px; border-radius:10px; background:transparent; color:var(--muted); border:none; text-align:center; cursor:pointer; white-space:nowrap; transition:all .18s ease; }
+  .tab:hover { color:var(--fg); }
+  .tab.active { background:var(--grad); color:#fff; box-shadow:0 4px 14px rgba(91,157,255,0.4); }
+  .daterow { display:flex; align-items:center; gap:8px; margin-bottom:16px; }
+  .daterow label { font-size:12px; color:var(--muted); }
+  input[type=date], input[type=text], input[type=number] { font-family:inherit; font-size:16px; padding:12px; border-radius:11px; border:1px solid var(--line); background:var(--bg2); color:var(--fg); transition:border-color .15s, box-shadow .15s; }
+  input:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 3px rgba(91,157,255,0.18); }
+  input[type=number] { -moz-appearance:textfield; }
+  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  .lift { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.35); transition:border-color .2s, box-shadow .2s; }
+  .lift.done { border-color:rgba(46,204,113,0.45); box-shadow:inset 0 0 0 1px rgba(46,204,113,0.22), 0 6px 20px rgba(46,204,113,0.07); }
+  .lift.skipped { opacity:0.5; filter:grayscale(0.4); }
+  .lift.better { border-color:rgba(46,204,113,0.55); background:linear-gradient(180deg, rgba(46,204,113,0.11), var(--card)); box-shadow:0 6px 20px rgba(46,204,113,0.13); }
+  .lift.pb { border-color:var(--gold); background:linear-gradient(180deg, rgba(255,202,74,0.15), var(--card)); box-shadow:0 0 0 1px rgba(255,202,74,0.3), 0 8px 26px rgba(255,202,74,0.22); }
+  .lift.worse { border-color:rgba(255,255,255,0.05); background:#101217; opacity:0.85; }
+  .lift-top { display:flex; gap:12px; align-items:flex-start; }
+  .lift-main { flex:1; min-width:0; }
+  .lift-photo { flex:0 0 auto; width:104px; height:104px; border-radius:12px; overflow:hidden; border:1px solid var(--line); }
+  .lift-photo img { width:100%; height:100%; object-fit:cover; display:block; cursor:pointer; }
+  .lift-head { display:flex; align-items:center; gap:10px; margin-bottom:9px; }
+  .ordbtn { font-family:inherit; font-size:14px; font-weight:800; min-width:48px; height:46px; padding:0 8px; border-radius:13px; border:1.5px solid var(--blue); background:transparent; color:var(--blue); cursor:pointer; transition:transform .12s, box-shadow .2s; }
+  .ordbtn:active { transform:scale(0.94); }
+  .ordbtn.set { background:linear-gradient(135deg,#2ecc71,#22a75a); border:none; color:#04140b; box-shadow:0 4px 14px rgba(46,204,113,0.4); }
+  .lift-name { font-size:17px; font-weight:700; flex:1; letter-spacing:-0.01em; cursor:pointer; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.18); text-underline-offset:3px; }
+  .lift-name .t { font-weight:400; color:var(--muted); font-size:12px; }
+  .flag { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; white-space:nowrap; letter-spacing:0.02em; }
+  .flag:empty { display:none; }
+  .flag.up { color:#7be6a4; background:rgba(46,204,113,0.16); }
+  .flag.hold { color:var(--muted); background:rgba(138,146,164,0.14); }
+  .flag.down { color:#ff8ba1; background:rgba(255,84,112,0.16); }
+  .flag.ceil { color:#ffc07a; background:rgba(255,159,69,0.16); }
+  .acts { display:flex; gap:6px; margin-bottom:9px; flex-wrap:wrap; }
+  .mini { font-family:inherit; font-size:12px; font-weight:600; padding:9px 14px; border-radius:999px; border:1px solid var(--line); background:var(--bg2); color:var(--muted); cursor:pointer; transition:all .15s; }
+  .mini:active { transform:scale(0.95); }
+  .mini.on-inj { color:var(--orange); border-color:rgba(255,159,69,0.5); background:rgba(255,159,69,0.1); }
+  .mini.on-skip { color:var(--red); border-color:rgba(255,84,112,0.5); background:rgba(255,84,112,0.1); }
+  .mini.on-fat { color:var(--blue); border-color:rgba(91,157,255,0.5); background:rgba(91,157,255,0.1); }
+  .last { font-size:12px; color:var(--muted); margin-bottom:9px; }
+  .last b { color:var(--fg); font-weight:600; }
+  .statusnote { font-size:12px; margin:3px 0 9px; padding:7px 10px; border-radius:9px; border-left:3px solid; }
+  .statusnote.defer { color:#ffc07a; background:rgba(255,159,69,0.1); border-color:var(--orange); }
+  .statusnote.skip { color:#ff8ba1; background:rgba(255,84,112,0.1); border-color:var(--red); }
+  .statusnote.inj { color:#ffc07a; background:rgba(255,159,69,0.1); border-color:var(--orange); }
+  .statusnote.fat { color:#9dc2ff; background:rgba(91,157,255,0.1); border-color:var(--blue); }
+  .thumb { flex:0 0 auto; width:46px; height:46px; object-fit:cover; border-radius:10px; border:1px solid var(--line); cursor:pointer; }
+  .fields { display:grid; gap:9px; align-items:end; }
+  .fields.g-amrap { grid-template-columns:repeat(3,1fr); }
+  .fields.g-amrap .fld.load { grid-column:1 / -1; }
+  .fields.g-heavy { grid-template-columns:2fr 1fr; }
+  .fld { display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .fld span { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; }
+  .fld input { width:100%; text-align:center; font-size:18px; font-weight:600; }
+  .fld.load input { text-align:left; }
+  .amrap span { color:var(--pink); }
+  .addrow { font-size:13px; color:var(--blue); cursor:pointer; padding:6px 0; display:inline-block; font-weight:600; }
+  .btnbar { display:flex; gap:8px; margin-top:18px; position:sticky; bottom:0; padding:12px 0; background:linear-gradient(transparent, var(--bg) 34%); backdrop-filter:blur(2px); }
+  button.act { flex:1; font-family:inherit; font-size:15px; font-weight:700; padding:16px 12px; border-radius:13px; border:none; cursor:pointer; transition:transform .12s, box-shadow .2s; letter-spacing:0.01em; }
+  button.act:active { transform:scale(0.97); }
+  button.primary { background:var(--grad); color:#fff; box-shadow:0 6px 20px rgba(91,157,255,0.38); }
+  button.ghost { background:var(--card2); color:var(--fg); border:1px solid var(--line); }
+  .hist { margin-top:26px; }
+  .hist h2 { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid var(--line); padding-bottom:8px; margin:0 0 12px; }
+  .hsession { font-size:12px; margin-bottom:14px; padding:11px 13px; background:var(--card); border:1px solid var(--line); border-radius:12px; }
+  .hsession .hdate { font-weight:700; color:var(--fg); display:block; margin-bottom:4px; }
+  .hsession .hline { color:var(--muted); display:block; padding:1px 0; }
+  .toast { position:fixed; bottom:84px; left:50%; transform:translateX(-50%); background:rgba(22,26,35,0.96); color:var(--fg); font-size:13px; font-weight:600; padding:11px 18px; border-radius:999px; border:1px solid var(--line); box-shadow:0 8px 30px rgba(0,0,0,0.5); backdrop-filter:blur(8px); opacity:0; transition:opacity .2s, transform .2s; pointer-events:none; z-index:20; }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(-4px); }
+  dialog { border:none; border-radius:20px; padding:0; max-width:92%; width:420px; background:var(--card); color:var(--fg); border:1px solid var(--line); box-shadow:0 24px 70px rgba(0,0,0,0.6); }
+  dialog::backdrop { background:rgba(5,7,11,0.66); backdrop-filter:blur(4px); }
+  .dlg-in { padding:18px; }
+  .dlg-in h3 { margin:0 0 5px; font-size:16px; font-weight:700; }
+  .dlg-in p { margin:0 0 14px; font-size:13px; color:var(--muted); }
+  .dlg-choices { display:flex; gap:8px; margin-bottom:8px; }
+  .dlg-choices button { flex:1; font-family:inherit; font-size:14px; font-weight:600; padding:13px; border-radius:12px; border:1px solid var(--line); background:var(--bg2); color:var(--fg); cursor:pointer; transition:all .15s; }
+  .dlg-choices button:hover { border-color:var(--blue); color:var(--blue); }
+  .dlg-choices button:active { transform:scale(0.97); }
+  textarea { width:100%; height:74px; font-family:inherit; font-size:15px; border:1px solid var(--line); border-radius:11px; padding:10px; background:var(--bg2); color:var(--fg); resize:vertical; margin-bottom:10px; }
+  textarea:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 3px rgba(91,157,255,0.18); }
+  #dataText { height:180px; font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+  .dlg-btns { display:flex; gap:8px; }
+  /* progress tab */
+  .picker { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+  .pchip { font-size:12px; font-weight:600; padding:7px 13px; border-radius:999px; background:var(--bg2); border:1px solid var(--line); color:var(--muted); cursor:pointer; transition:all .15s; }
+  .pchip:hover { color:var(--fg); }
+  .pchip.active { border-color:var(--pink); color:#fff; background:rgba(255,92,147,0.16); }
+  .pbcards { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px; }
+  .pbcard { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px 10px; text-align:center; }
+  .pbcard .l { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; margin-bottom:3px; }
+  .pbcard .v { font-size:22px; font-weight:800; letter-spacing:-0.02em; }
+  canvas { width:100%; display:block; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:6px; }
+</style>
+</head>
+<body>
+
+<h1>Strength Logger</h1>
+<div class="sub" id="sub">Local record · slot-order + same-load AMRAP rule from STRENGTH_LOG</div>
+
+<div class="tabs" id="tabs"></div>
+
+<!-- LOG VIEW -->
+<div id="logview">
+  <div class="daterow">
+    <label for="date">Session date</label>
+    <input type="date" id="date">
+  </div>
+  <div id="lifts"></div>
+  <div class="addrow" id="addLift" style="display:none">+ add exercise</div>
+  <div class="btnbar">
+    <button class="act primary" id="save">Save session</button>
+    <button class="act ghost" id="copy">Copy for Claude</button>
+    <button class="act ghost" id="data">Backup</button>
+  </div>
+  <div class="hist" id="hist"></div>
+</div>
+
+<!-- PROGRESS VIEW -->
+<div id="progview" style="display:none">
+  <div class="picker" id="picker"></div>
+  <div class="pbcards" id="pbcards"></div>
+  <canvas id="chart" width="600" height="300" role="img" aria-label="PB progress chart"></canvas>
+  <div class="sub" id="chartnote" style="margin-top:8px"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- reason modal (busy / personal) -->
+<dialog id="reasonDlg"><div class="dlg-in">
+  <h3 id="reasonTitle"></h3>
+  <p id="reasonSub"></p>
+  <div class="dlg-choices">
+    <button data-r="busy">Machine busy</button>
+    <button data-r="personal">Personal choice</button>
+  </div>
+</div></dialog>
+
+<!-- injury modal -->
+<dialog id="injDlg"><div class="dlg-in">
+  <h3>Injury / tweak</h3>
+  <p id="injSub"></p>
+  <textarea id="injNote" placeholder="Brief reason (e.g. right elbow tweak on press)"></textarea>
+  <div class="dlg-choices">
+    <button data-a="modify">Modified (lighter/fewer)</button>
+    <button data-a="skip">Skipped it</button>
+  </div>
+  <div class="dlg-btns"><button class="act ghost" id="injCancel">Cancel</button></div>
+</div></dialog>
+
+<!-- fatigue modal -->
+<dialog id="fatDlg"><div class="dlg-in">
+  <h3>Muscle exhaustion</h3>
+  <p id="fatSub">Which set did the wall hit?</p>
+  <div class="dlg-choices">
+    <button data-s="1">Set 1</button>
+    <button data-s="2">Set 2</button>
+    <button data-s="3">Set 3</button>
+  </div>
+  <textarea id="fatNote" placeholder="Optional — which muscle / how it felt"></textarea>
+  <div class="dlg-btns"><button class="act ghost" id="fatClear">Clear it</button><button class="act ghost" id="fatCancel">Cancel</button></div>
+</div></dialog>
+
+<!-- data modal -->
+<dialog id="dataDlg"><div class="dlg-in">
+  <h3 id="dataTitle"></h3>
+  <textarea id="dataText"></textarea>
+  <div class="dlg-btns">
+    <button class="act primary" id="dataCopy">Copy</button>
+    <button class="act ghost" id="dataImport" style="display:none">Restore</button>
+    <button class="act ghost" id="dataClose">Close</button>
+  </div>
+</div></dialog>
+
+<!-- image view modal -->
+<dialog id="imgDlg"><div class="dlg-in">
+  <img id="imgBig" style="width:100%;border-radius:10px;margin-bottom:12px">
+  <div class="dlg-btns">
+    <button class="act primary" id="imgReplace">Replace photo</button>
+    <button class="act ghost" id="imgDelete">Remove</button>
+    <button class="act ghost" id="imgClose">Close</button>
+  </div>
+</div></dialog>
+
+<!-- rename modal -->
+<dialog id="nameDlg"><div class="dlg-in">
+  <h3>Rename exercise</h3>
+  <p id="nameSub"></p>
+  <input type="text" id="nameInput" style="width:100%;margin-bottom:12px">
+  <div class="dlg-btns">
+    <button class="act primary" id="nameSave">Save</button>
+    <button class="act ghost" id="nameReset">Reset</button>
+    <button class="act ghost" id="nameCancel">Cancel</button>
+  </div>
+</div></dialog>
+
+<input type="file" id="fileIn" accept="image/*" capture="environment" style="display:none">
+
+<script>
+// ===== workout definitions (ordered) =====
+const WORKOUTS = {
+  "Volume Upper": { type:"amrap", lifts:["Bench","Assisted Pullups","Shoulder","Decline","Curl","Chest","Pec Fly","Triceps"] },
+  "Volume Lower": { type:"amrap", lifts:["RDL","Farmer Carry","Leg Press","Leg Extension","Leg Curl"] },
+  "Heavy Upper":  { type:"heavy", lifts:[["Bench",5],["Pullups",6],["Shoulder",6],["Decline",6],["Barbell Curl",7],["Chest Press",6],["Pec Fly",7],["Triceps",6]] },
+  "Heavy Lower":  { type:"heavy", lifts:[["RDL",6],["Leg Press",6],["Leg Extension",6],["Shoulder Shrug",6],["Leg Curl",6]] },
+  "Abs":          { type:"free", lifts:[] }
+};
+const ORDER = ["Volume Upper","Volume Lower","Heavy Upper","Heavy Lower","Abs","Progress"];
+function liftNames(w){ return WORKOUTS[w].lifts.map(l=>Array.isArray(l)?l[0]:l); }
+function targetOf(w,name){ const f=WORKOUTS[w].lifts.find(l=>Array.isArray(l)&&l[0]===name); return f?f[1]:null; }
+
+// ===== seed history (from STRENGTH_LOG) =====
+const SEED = {
+  "Volume Upper": [{ date:"2026-07-05", lifts:{
+    "Bench":{l1:"165",r1:"7",l2:"165",r2:"9",l3:"165",r3:"12",order:1}, "Assisted Pullups":{l1:"20",r1:"7",l2:"20",r2:"9",l3:"20",r3:"11",order:2},
+    "Shoulder":{l1:"107",r1:"7",l2:"107",r2:"9",l3:"107",r3:"10",order:3}, "Decline":{l1:"120",r1:"7",l2:"120",r2:"8",l3:"120",r3:"7",order:4},
+    "Curl":{l1:"50",r1:"7",l2:"50",r2:"9",l3:"50",r3:"22",order:5}, "Chest":{l1:"110",r1:"7",l2:"110",r2:"9",l3:"110",r3:"13",order:6},
+    "Pec Fly":{l1:"140",r1:"7",l2:"140",r2:"9",l3:"140",r3:"12",order:7}, "Triceps":{l1:"210",r1:"7",l2:"210",r2:"9",l3:"210",r3:"9",order:8} }},
+  { date:"2026-07-12", lifts:{
+    "Bench":{l1:"165",r1:"7",l2:"165",r2:"9",l3:"165",r3:"15",order:1}, "Assisted Pullups":{l1:"20",r1:"7",l2:"20",r2:"9",l3:"20",r3:"14",order:2},
+    "Shoulder":{l1:"107",r1:"7",l2:"107",r2:"9",l3:"107",r3:"12",order:3}, "Decline":{l1:"125 (70/55)",r1:"7",l2:"125 (70/55)",r2:"9",l3:"125 (70/55)",r3:"9",order:4},
+    "Curl":{l1:"50",r1:"7",l2:"50",r2:"9",l3:"50",r3:"26",order:5}, "Chest":{l1:"110",r1:"7",l2:"110",r2:"9",l3:"110",r3:"15",order:6},
+    "Pec Fly":{l1:"140",r1:"7",l2:"140",r2:"9",l3:"140",r3:"13",order:7}, "Triceps":{l1:"210",r1:"7",l2:"210",r2:"9",l3:"210",r3:"11",order:8} }}],
+  "Volume Lower": [{ date:"2026-07-11", lifts:{
+    "RDL":{l1:"205",r1:"7",l2:"205",r2:"9",l3:"205",r3:"15",order:1}, "Farmer Carry":{l1:"90",r1:"1",l2:"90",r2:"1",l3:"90",r3:"1",order:2},
+    "Leg Press":{l1:"280",r1:"7",l2:"280",r2:"9",l3:"280",r3:"16",order:3}, "Leg Extension":{l1:"225",r1:"7",l2:"225",r2:"9",l3:"225",r3:"12",order:4},
+    "Leg Curl":{l1:"100",r1:"7",l2:"100",r2:"9",l3:"100",r3:"15",order:5} }}],
+  "Heavy Upper": [{ date:"2026-07-08", lifts:{
+    "Bench":{l1:"205",r1:"5",l2:"205",r2:"5",l3:"205",r3:"5",order:1}, "Assisted Pullups":{l1:"10",r1:"1",l2:"5",r2:"1",l3:"5",r3:"1",order:2},
+    "Shoulder":{l1:"125",r1:"6",l2:"120",r2:"6",l3:"120",r3:"6",order:3}, "Decline":{l1:"140",r1:"6",l2:"160",r2:"6",l3:"150",r3:"6",order:4},
+    "Barbell Curl":{l1:"60",r1:"7",l2:"60",r2:"7",l3:"60",r3:"7",order:5}, "Chest Press":{l1:"130",r1:"6",l2:"140",r2:"6",l3:"140",r3:"6",order:6},
+    "Pec Fly":{l1:"160",r1:"7",l2:"160",r2:"7",l3:"160",r3:"7",order:7},
+    "Triceps":{skipped:true,skipReason:"busy"}, "Lat Pulldown":{l1:"150",r1:"6",l2:"170",r2:"6",l3:"190",r3:"6",order:8} }}],
+  "Heavy Lower": [{ date:"2026-07-07", lifts:{
+    "RDL":{l1:"225",r1:"6",l2:"245",r2:"6",l3:"265",r3:"4",order:1}, "Leg Press":{l1:"300",r1:"6",l2:"310",r2:"6",l3:"320",r3:"6",order:2},
+    "Leg Extension":{l1:"245",r1:"6",l2:"248",r2:"6",l3:"248",r3:"6",order:3}, "Shoulder Shrug":{l1:"175",r1:"6",l2:"175",r2:"6",l3:"175",r3:"6",order:4},
+    "Leg Curl":{l1:"130",r1:"6",l2:"125",r2:"6",l3:"125",r3:"6",order:5} }}],
+  "Abs": []
+};
+
+const K_SESS='slog_sessions_v3', K_IMG='slog_images_v2', K_DRAFT='slog_draft_v3', K_NAMES='slog_names_v1';
+function jload(k,f){ try{ const d=JSON.parse(localStorage.getItem(k)); return d==null?f:d; }catch(e){ return f; } }
+let DB = jload(K_SESS, JSON.parse(JSON.stringify(SEED)));
+let IMG = jload(K_IMG, {});
+let NAMES = jload(K_NAMES, {});   // { "Workout::Canonical": "Custom display name" } — display only, data keys stay canonical
+function saveDB(){ localStorage.setItem(K_SESS, JSON.stringify(DB)); }
+function saveIMG(){ localStorage.setItem(K_IMG, JSON.stringify(IMG)); }
+function saveNAMES(){ localStorage.setItem(K_NAMES, JSON.stringify(NAMES)); }
+function displayName(w,name){ return NAMES[w+'::'+name] || name; }
+
+const $=id=>document.getElementById(id);
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const todayISO=()=>new Date().toLocaleDateString('en-CA');
+const fmtDate=iso=>{ const p=iso.split('-'); return MON[+p[1]-1]+' '+(+p[2]); };
+const loadNum=s=>{ const m=String(s||'').match(/[\d.]+/); return m?parseFloat(m[0]):null; };
+function lastSession(w){ const a=DB[w]||[]; return a.length?a[a.length-1]:null; }
+function bestPriorE1RM(w,name){ let best=null; (DB[w]||[]).forEach(s=>{ const v=s.lifts[name]; if(!v||v.skipped) return; const e=e1rm(w,v); if(e!=null && (best==null||e>best)) best=e; }); return best; }
+function setPerf(el, cur, lastE, bestE){
+  el.classList.remove('better','pb','worse');
+  if(cur==null || bestE==null) return;      // need a numeric entry AND some history to compare
+  if(cur > bestE+0.001) el.classList.add('pb');
+  else if(lastE!=null && cur > lastE+0.001) el.classList.add('better');
+  else if(lastE!=null && cur < lastE-0.001) el.classList.add('worse');
+}
+
+let current="Volume Upper";
+let draft=null;      // live session being entered
+let counter=0;       // actual-order counter for the draft
+
+// ===== draft lifecycle =====
+function freshDraft(w){ return { workout:w, date:todayISO(), lifts:{}, counter:0 }; }
+function loadDraft(w){
+  const d=jload(K_DRAFT,null);
+  draft = (d && d.workout===w) ? d : freshDraft(w);
+  counter = draft.counter||0;
+}
+function saveDraft(){ if(draft){ draft.counter=counter; localStorage.setItem(K_DRAFT, JSON.stringify(draft)); } }
+function L(name){ if(!draft.lifts[name]) draft.lifts[name]={}; return draft.lifts[name]; }
+
+// ===== modals (promise-based) =====
+function askReason(title, sub){
+  return new Promise(res=>{
+    $('reasonTitle').textContent=title; $('reasonSub').textContent=sub||'';
+    const dlg=$('reasonDlg');
+    const h=e=>{ const b=e.target.closest('button[data-r]'); if(!b)return; dlg.removeEventListener('click',h); dlg.close(); res(b.dataset.r); };
+    dlg.addEventListener('click',h); dlg.showModal();
+  });
+}
+function askInjury(name){
+  return new Promise(res=>{
+    $('injSub').textContent=name; $('injNote').value=(draft.lifts[name]&&draft.lifts[name].injury&&draft.lifts[name].injury.note)||'';
+    const dlg=$('injDlg');
+    const done=v=>{ dlg.removeEventListener('click',h); $('injCancel').removeEventListener('click',cancel); dlg.close(); res(v); };
+    const h=e=>{ const b=e.target.closest('button[data-a]'); if(!b)return; done({action:b.dataset.a, note:$('injNote').value.trim()}); };
+    const cancel=()=>done(null);
+    dlg.addEventListener('click',h); $('injCancel').addEventListener('click',cancel); dlg.showModal();
+  });
+}
+function askFatigue(name){
+  return new Promise(res=>{
+    const cur=draft.lifts[name]&&draft.lifts[name].fatigue;
+    $('fatSub').textContent=name+' — which set did the wall hit?'; $('fatNote').value=(cur&&cur.note)||'';
+    const dlg=$('fatDlg');
+    const done=v=>{ dlg.removeEventListener('click',h); $('fatCancel').removeEventListener('click',cancel); $('fatClear').removeEventListener('click',clear); dlg.close(); res(v); };
+    const h=e=>{ const b=e.target.closest('button[data-s]'); if(!b)return; done({set:+b.dataset.s, note:$('fatNote').value.trim()}); };
+    const cancel=()=>done(undefined);
+    const clear=()=>done(null);
+    dlg.addEventListener('click',h); $('fatCancel').addEventListener('click',cancel); $('fatClear').addEventListener('click',clear); dlg.showModal();
+  });
+}
+
+// ===== tabs =====
+function buildTabs(){
+  const t=$('tabs'); t.innerHTML='';
+  ORDER.forEach(w=>{
+    const b=document.createElement('div'); b.className='tab'+(w===current?' active':''); b.textContent=w;
+    b.onclick=()=>{ current=w; if(w!=='Progress') loadDraft(w); switchView(); };
+    t.appendChild(b);
+  });
+}
+function switchView(){
+  buildTabs();
+  const prog = current==='Progress';
+  $('logview').style.display = prog?'none':'block';
+  $('progview').style.display = prog?'block':'none';
+  if(prog) renderProgress(); else render();
+}
+
+// ===== log-order handling =====
+async function logNow(name){
+  const w=WORKOUTS[current]; if(w.type==='free') return;
+  const li=L(name);
+  if(li.order){ return; } // already logged
+  const names=liftNames(current);
+  const idx=names.indexOf(name);
+  // any earlier-in-prescribed-order lift still not logged & not yet accounted for -> ask why leapfrogged
+  for(let i=0;i<idx;i++){
+    const e=names[i], el=draft.lifts[e]||{};
+    if(!el.order && el.status!=='skipped' && !el.deferReason){
+      const r=await askReason('Why before '+e+'?', 'You are logging '+name+' before '+e+' (slot #'+(i+1)+').');
+      L(e).deferReason=r;
+    }
+  }
+  counter++; li.order=counter; li.status='done';
+  saveDraft(); render();
+}
+async function skipLift(name){
+  const li=L(name);
+  if(li.status==='skipped'){ li.status=undefined; li.skipReason=undefined; saveDraft(); render(); return; }
+  const r=await askReason('Skip '+name+'?', 'Not doing it today.');
+  li.status='skipped'; li.skipReason=r; li.order=undefined;
+  saveDraft(); render();
+}
+async function injuryLift(name){
+  const v=await askInjury(name);
+  if(!v) return;
+  const li=L(name);
+  li.injury={note:v.note, action:v.action};
+  if(v.action==='skip'){ li.status='skipped'; li.skipReason='injury'; li.order=undefined; }
+  saveDraft(); render();
+}
+async function fatigueLift(name){
+  const v=await askFatigue(name);
+  if(v===undefined) return;            // cancel
+  const li=L(name);
+  if(v===null){ delete li.fatigue; }   // clear
+  else li.fatigue={set:v.set, note:v.note};
+  saveDraft(); render();
+}
+
+// ===== image capture =====
+let imgTarget=null;
+function pickImage(name){ imgTarget=name; $('fileIn').value=''; $('fileIn').click(); }
+$('fileIn').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const im=new Image();
+    im.onload=()=>{
+      const max=720, sc=Math.min(1, max/Math.max(im.width,im.height));
+      const c=document.createElement('canvas'); c.width=im.width*sc; c.height=im.height*sc;
+      c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+      IMG[current+'::'+imgTarget]=c.toDataURL('image/jpeg',0.7); saveIMG(); render();
+    };
+    im.src=rd.result;
+  };
+  rd.readAsDataURL(f);
+};
+function openImg(name){
+  const key=current+'::'+name;
+  $('imgBig').src=IMG[key];
+  const dlg=$('imgDlg');
+  $('imgReplace').onclick=()=>{ dlg.close(); pickImage(name); };
+  $('imgDelete').onclick=()=>{ delete IMG[key]; saveIMG(); dlg.close(); render(); };
+  $('imgClose').onclick=()=>dlg.close();
+  dlg.showModal();
+}
+function askRename(name){
+  const key=current+'::'+name;
+  $('nameSub').textContent='Default: '+name;
+  $('nameInput').value=displayName(current,name);
+  const dlg=$('nameDlg');
+  const cleanup=()=>{ $('nameSave').onclick=null; $('nameReset').onclick=null; $('nameCancel').onclick=null; dlg.close(); };
+  $('nameSave').onclick=()=>{ const v=$('nameInput').value.trim(); if(!v||v===name) delete NAMES[key]; else NAMES[key]=v; saveNAMES(); cleanup(); render(); };
+  $('nameReset').onclick=()=>{ delete NAMES[key]; saveNAMES(); cleanup(); render(); };
+  $('nameCancel').onclick=cleanup;
+  dlg.showModal();
+}
+
+// ===== render log view =====
+function render(){
+  if(current==='Progress') return;
+  $('date').value = draft.date;
+  const w=WORKOUTS[current], box=$('lifts'); box.innerHTML='';
+  $('addLift').style.display = w.type==='free' ? 'inline-block' : 'none';
+  const prev=lastSession(current);
+  if(w.type==='free'){ renderFree(box,prev); renderHist(); return; }
+  liftNames(current).forEach((name,i)=>{
+    box.appendChild(w.type==='amrap' ? amrapCard(name,i,prev) : heavyCard(name,i,prev));
+  });
+  renderHist();
+}
+
+function cardShell(name,i,prev){
+  const li=L(name), el=document.createElement('div');
+  el.className='lift'+(li.order?' done':'')+(li.status==='skipped'?' skipped':'');
+  el.dataset.name=name;
+  const hasImg=!!IMG[current+'::'+name];
+
+  const top=document.createElement('div'); top.className='lift-top';
+  const main=document.createElement('div'); main.className='lift-main';
+
+  const ordLabel = li.order ? '#'+li.order : (i+1)+'▸';
+  const head=document.createElement('div'); head.className='lift-head';
+  head.innerHTML=`<button class="ordbtn${li.order?' set':''}">${ordLabel}</button>
+    <span class="lift-name">${displayName(current,name)}</span><span class="flag hold" data-flag></span>`;
+  head.querySelector('.ordbtn').onclick=()=>logNow(name);
+  head.querySelector('.lift-name').onclick=()=>askRename(name);
+  main.appendChild(head);
+
+  const acts=document.createElement('div'); acts.className='acts';
+  acts.innerHTML=`<button class="mini" data-a="photo">${hasImg?'photo ✓':'photo'}</button>
+    <button class="mini${li.injury?' on-inj':''}" data-a="inj">injury</button>
+    <button class="mini${li.fatigue?' on-fat':''}" data-a="fat">${li.fatigue?'exhausted ✓':'exhaustion'}</button>
+    <button class="mini${li.status==='skipped'?' on-skip':''}" data-a="skip">${li.status==='skipped'?'skipped':'skip'}</button>`;
+  acts.querySelector('[data-a=photo]').onclick=()=> hasImg?openImg(name):pickImage(name);
+  acts.querySelector('[data-a=inj]').onclick=()=>injuryLift(name);
+  acts.querySelector('[data-a=fat]').onclick=()=>fatigueLift(name);
+  acts.querySelector('[data-a=skip]').onclick=()=>skipLift(name);
+  main.appendChild(acts);
+
+  if(li.deferReason){ main.appendChild(note('defer','Out of order — '+(li.deferReason==='busy'?'machine busy':'personal choice'))); }
+  if(li.status==='skipped'){ main.appendChild(note('skip','Skipped — '+(li.skipReason==='injury'?'injury':li.skipReason==='busy'?'machine busy':'personal choice'))); }
+  if(li.injury && li.status!=='skipped'){ main.appendChild(note('inj','Injury (modified): '+(li.injury.note||'—'))); }
+  if(li.fatigue){ main.appendChild(note('fat','Exhaustion hit set '+li.fatigue.set+(li.fatigue.note?' — '+li.fatigue.note:''))); }
+
+  top.appendChild(main);
+  if(hasImg){ const pw=document.createElement('div'); pw.className='lift-photo'; const im=document.createElement('img'); im.src=IMG[current+'::'+name]; im.onclick=e=>{ e.stopPropagation(); openImg(name); }; pw.appendChild(im); top.appendChild(pw); }
+  el.appendChild(top);
+  return el;
+}
+function note(cls,txt){ const d=document.createElement('div'); d.className='statusnote '+cls; d.textContent=txt; return d; }
+
+function amrapCard(name,i,prev){
+  const el=cardShell(name,i,prev), li=L(name);
+  const p=prev&&prev.lifts[name];
+  const bestE=bestPriorE1RM(current,name);
+  const last=document.createElement('div'); last.className='last';
+  const pl = p&&!p.skipped ? `${p.l1}×${p.r1}, ${p.l2}×${p.r2}, ${p.l3}×${p.r3}` : '';
+  last.innerHTML = !p ? 'No prior session' : p.skipped ? `Last (${fmtDate(prev.date)}): skipped` : `Last (${fmtDate(prev.date)}): <b>${pl}</b>${p.order?' · #'+p.order:''}`;
+  el.querySelector('.lift-main').appendChild(last);
+  const repLabel=['t7','t9','AMRAP'], repPh=['7','9','max'];
+  const f=document.createElement('div'); f.className='fields g-heavy';
+  f.innerHTML=[1,2,3].map(n=>`
+    <label class="fld"><span>set ${n} · load</span><input type="number" data-f="l${n}" inputmode="numeric" value="${li['l'+n]||''}"></label>
+    <label class="fld${n===3?' amrap':''}"><span>${repLabel[n-1]}</span><input type="number" data-f="r${n}" inputmode="numeric" placeholder="${repPh[n-1]}" value="${li['r'+n]||''}"></label>`).join('');
+  el.appendChild(f);
+  const flag=el.querySelector('[data-flag]');
+  const rc=()=>{
+    [1,2,3].forEach(n=>{ li['l'+n]=f.querySelector('[data-f=l'+n+']').value.trim(); li['r'+n]=f.querySelector('[data-f=r'+n+']').value.trim(); });
+    saveDraft();
+    setPerf(el, e1rm(current,li), (p&&!p.skipped)?e1rm(current,p):null, bestE);
+    if(!li.r3){ flag.className='flag hold'; flag.textContent=li.order?'#'+li.order:''; return; }
+    if(!p||p.skipped){ flag.className='flag hold'; flag.textContent='logged'; return; }
+    if(li.l3!==p.l3){ flag.className='flag hold'; flag.textContent='load changed'; return; }
+    const d=+li.r3-+p.r3;
+    if(d>0){ flag.className='flag up'; flag.textContent='▲ +'+d; }
+    else if(d===0){ flag.className='flag hold'; flag.textContent='held'; }
+    else { flag.className='flag down'; flag.textContent='▼ '+d; }
+    if(li.r2 && +li.r2<9){ flag.className='flag ceil'; flag.textContent+=' · set2<9'; }
+  };
+  f.querySelectorAll('input').forEach(i=>i.addEventListener('input',rc)); rc();
+  return el;
+}
+
+function heavyCard(name,i,prev){
+  const el=cardShell(name,i,prev), li=L(name), tgt=targetOf(current,name);
+  el.querySelector('.lift-name').insertAdjacentHTML('beforeend', ` <span class="t">×${tgt}</span>`);
+  const p=prev&&prev.lifts[name];
+  const bestE=bestPriorE1RM(current,name);
+  const last=document.createElement('div'); last.className='last';
+  const pl = p&&!p.skipped ? `${p.l1}×${p.r1||tgt}, ${p.l2}×${p.r2||tgt}, ${p.l3}×${p.r3||tgt}` : '';
+  last.innerHTML = !p ? 'No prior session' : p.skipped ? `Last (${fmtDate(prev.date)}): skipped` : `Last (${fmtDate(prev.date)}): <b>${pl}</b>${p.order?' · #'+p.order:''}`;
+  el.querySelector('.lift-main').appendChild(last);
+  const f=document.createElement('div'); f.className='fields g-heavy';
+  f.innerHTML=[1,2,3].map(n=>`
+    <label class="fld"><span>set ${n} · load</span><input type="number" data-f="l${n}" inputmode="numeric" value="${li['l'+n]||''}"></label>
+    <label class="fld reps"><span>reps</span><input type="number" data-f="r${n}" inputmode="numeric" placeholder="${tgt}" value="${li['r'+n]||''}"></label>`).join('');
+  el.appendChild(f);
+  const flag=el.querySelector('[data-flag]');
+  const rc=()=>{
+    [1,2,3].forEach(n=>{ li['l'+n]=f.querySelector('[data-f=l'+n+']').value.trim(); li['r'+n]=f.querySelector('[data-f=r'+n+']').value.trim(); });
+    saveDraft();
+    const cur=e1rm(current,li), pe=(p&&!p.skipped)?e1rm(current,p):null;
+    setPerf(el, cur, pe, bestE);
+    if(cur==null){ flag.className='flag hold'; flag.textContent=li.order?'#'+li.order:''; return; }
+    if(pe==null){ flag.className='flag hold'; flag.textContent='logged'; return; }
+    if(cur>pe+0.001){ flag.className='flag up'; flag.textContent='▲ e1RM '+cur.toFixed(0); }
+    else if(Math.abs(cur-pe)<=0.001){ flag.className='flag hold'; flag.textContent='held'; }
+    else { flag.className='flag down'; flag.textContent='▼ e1RM '+cur.toFixed(0); }
+  };
+  f.querySelectorAll('input').forEach(i=>i.addEventListener('input',rc)); rc();
+  return el;
+}
+
+function renderFree(box,prev){
+  const li=draft.lifts;
+  let names=Object.keys(li);
+  if(names.length===0){ if(prev){ Object.keys(prev.lifts).forEach(n=>li[n]={note:''}); names=Object.keys(li);} else { li['']={note:''}; names=['']; } }
+  names.forEach(name=>{
+    const el=document.createElement('div'); el.className='lift';
+    const p=prev&&name&&prev.lifts[name];
+    el.innerHTML=`<div class="lift-head"><input type="text" data-f="name" placeholder="exercise" value="${name}" style="font-weight:600;flex:1">
+      <span class="addrow" data-del style="color:var(--red)">remove</span></div>
+      <div class="last">${p?('Last: <b>'+p.note+'</b>'):'&nbsp;'}</div>
+      <input type="text" data-f="note" placeholder="load / reps / notes" style="width:100%" value="${(li[name].note)||''}">`;
+    el.querySelector('[data-f=note]').addEventListener('input',e=>{ li[name].note=e.target.value; saveDraft(); });
+    el.querySelector('[data-f=name]').addEventListener('change',e=>{ const nn=e.target.value.trim(); if(nn&&nn!==name){ li[nn]=li[name]; delete li[name]; saveDraft(); render(); }});
+    el.querySelector('[data-del]').onclick=()=>{ delete li[name]; saveDraft(); render(); };
+    box.appendChild(el);
+  });
+}
+$('addLift').onclick=()=>{ let n='exercise '+(Object.keys(draft.lifts).length+1); draft.lifts[n]={note:''}; saveDraft(); render(); };
+
+// ===== save session =====
+function cleanLift(w,name,li){
+  const o={};
+  if(w.type==='free'){ if(!li.note) return null; o.note=li.note; }
+  else {
+    if(!li.l1&&!li.l2&&!li.l3&&li.status!=='skipped') return null;
+    const t=(w.type==='heavy')?targetOf(w,name):null;
+    [1,2,3].forEach(n=>{ o['l'+n]=li['l'+n]||''; o['r'+n]=li['r'+n]||(t&&li['l'+n]?String(t):''); });
+  }
+  if(li.order) o.order=li.order;
+  if(li.deferReason) o.deferReason=li.deferReason;
+  if(li.status==='skipped'){ o.skipped=true; o.skipReason=li.skipReason; }
+  if(li.injury) o.injury=li.injury;
+  if(li.fatigue) o.fatigue=li.fatigue;
+  return o;
+}
+$('save').onclick=()=>{
+  const w=WORKOUTS[current], lifts={};
+  Object.keys(draft.lifts).forEach(n=>{ const c=cleanLift(w,n,draft.lifts[n]); if(c) lifts[n===''?'(unnamed)':n]=c; });
+  if(!Object.keys(lifts).length){ toast('Nothing to save'); return; }
+  const s={ date:draft.date, lifts };
+  DB[current]=DB[current]||[];
+  const ex=DB[current].findIndex(x=>x.date===s.date);
+  if(ex>=0) DB[current][ex]=s; else DB[current].push(s);
+  DB[current].sort((a,b)=>a.date.localeCompare(b.date));
+  saveDB();
+  localStorage.removeItem(K_DRAFT); loadDraft(current);
+  toast('Saved '+current+' · '+fmtDate(s.date)); render();
+};
+$('date').addEventListener('change',e=>{ draft.date=e.target.value; saveDraft(); });
+
+// ===== export text =====
+function sessionText(w,s){
+  const t=WORKOUTS[w].type;
+  const ents=Object.entries(s.lifts).sort((a,b)=>(a[1].order||99)-(b[1].order||99));
+  let out=w.toUpperCase()+' ('+fmtDate(s.date)+')\n';
+  for(const [name,v] of ents){
+    const dn=displayName(w,name);
+    if(v.skipped){ out+=`— ${dn}: SKIPPED (${v.skipReason==='injury'?'injury':v.skipReason})\n`; continue; }
+    const pre = v.order?('#'+v.order+' '):'';
+    const sameLoad = v.l1===v.l2 && v.l2===v.l3;
+    let line = t==='free' ? `${dn} — ${v.note}`
+             : (t==='amrap' && sameLoad) ? `${pre}${dn} (${v.l1}) ${v.r1}, ${v.r2}, ${v.r3}F`
+             : `${pre}${dn} — ${v.l1}×${v.r1}, ${v.l2}×${v.r2}, ${v.l3}×${v.r3}${t==='amrap'?'F':''}`;
+    if(v.deferReason) line+=`  [out of order: ${v.deferReason==='busy'?'machine busy':'personal choice'}]`;
+    if(v.injury) line+=`  [injury/modified: ${v.injury.note||'—'}]`;
+    if(v.fatigue) line+=`  [exhaustion hit set ${v.fatigue.set}${v.fatigue.note?': '+v.fatigue.note:''}]`;
+    out+=line+'\n';
+  }
+  return out;
+}
+$('copy').onclick=()=>{
+  const w=WORKOUTS[current], lifts={};
+  Object.keys(draft.lifts).forEach(n=>{ const c=cleanLift(w,n,draft.lifts[n]); if(c) lifts[n]=c; });
+  if(!Object.keys(lifts).length){ toast('Nothing to copy'); return; }
+  openData('Paste to Claude for STRENGTH_LOG', sessionText(current,{date:draft.date,lifts}), false);
+};
+$('data').onclick=()=>openData('Backup / Restore (JSON)', JSON.stringify({DB,IMG,NAMES},null,1), true);
+function openData(title,text,imp){ $('dataTitle').textContent=title; $('dataText').value=text; $('dataImport').style.display=imp?'block':'none'; $('dataDlg').showModal(); }
+$('dataCopy').onclick=async()=>{ const t=$('dataText'); t.select(); try{ await navigator.clipboard.writeText(t.value);}catch(e){ document.execCommand('copy'); } toast('Copied'); };
+$('dataImport').onclick=()=>{ try{ const d=JSON.parse($('dataText').value); if(d.DB){DB=d.DB;IMG=d.IMG||{};NAMES=d.NAMES||{};} else DB=d; saveDB(); saveIMG(); saveNAMES(); toast('Restored'); $('dataDlg').close(); switchView(); }catch(e){ toast('Invalid JSON'); } };
+$('dataClose').onclick=()=>$('dataDlg').close();
+
+function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1600); }
+
+// ===== history =====
+function renderHist(){
+  const box=$('hist'), arr=(DB[current]||[]).slice().reverse();
+  if(!arr.length){ box.innerHTML=''; return; }
+  const t=WORKOUTS[current].type;
+  let html='<h2>'+current+' — history</h2>';
+  arr.forEach(s=>{
+    html+='<div class="hsession"><span class="hdate">'+fmtDate(s.date)+'</span>';
+    Object.entries(s.lifts).sort((a,b)=>(a[1].order||99)-(b[1].order||99)).forEach(([name,v])=>{
+      let line;
+      const dn=displayName(current,name);
+      const pre=v.order?'#'+v.order+' ':'';
+      const sameLoad = v.l1===v.l2 && v.l2===v.l3;
+      if(v.skipped) line=dn+': skipped ('+(v.skipReason||'')+')';
+      else if(t==='free') line=dn+': '+v.note;
+      else if(t==='amrap' && sameLoad) line=pre+dn+' '+v.l1+': '+v.r1+'/'+v.r2+'/'+v.r3+'F';
+      else line=pre+dn+': '+v.l1+'×'+(v.r1||'')+', '+v.l2+'×'+(v.r2||'')+', '+v.l3+'×'+(v.r3||'')+(t==='amrap'?'F':'');
+      if(v.deferReason) line+=' · out-of-order';
+      if(v.injury) line+=' · injury';
+      if(v.fatigue) line+=' · exhaustion s'+v.fatigue.set;
+      html+='<div class="hline">'+line+'</div>';
+    });
+    html+='</div>';
+  });
+  box.innerHTML=html;
+}
+
+// ===== progress / PB chart (estimated 1RM, hand-drawn) =====
+let progWorkout="Volume Upper", progLift=null;
+function e1rm(w,v){
+  if(WORKOUTS[w].type==='free') return null;
+  let best=null; for(let n=1;n<=3;n++){ const ld=loadNum(v['l'+n]); if(!ld) continue; const r=+(v['r'+n])||5; const e=ld*(1+r/30); if(best==null||e>best) best=e; } return best;
+}
+function renderProgress(){
+  // workout picker + lift picker
+  const pk=$('picker'); pk.innerHTML='';
+  ['Volume Upper','Volume Lower','Heavy Upper','Heavy Lower'].forEach(w=>{
+    const c=document.createElement('span'); c.className='pchip'+(w===progWorkout?' active':''); c.textContent=w;
+    c.onclick=()=>{ progWorkout=w; progLift=null; renderProgress(); }; pk.appendChild(c);
+  });
+  const names=liftNames(progWorkout);
+  const lp=document.createElement('div'); lp.className='picker'; lp.style.marginTop='0';
+  names.forEach(n=>{ const c=document.createElement('span'); c.className='pchip'+((progLift||names[0])===n?' active':''); c.textContent=displayName(progWorkout,n); c.onclick=()=>{ progLift=n; renderProgress(); }; lp.appendChild(c); });
+  // rebuild view container
+  const pv=$('progview');
+  pv.querySelectorAll('.picker').forEach((e,i)=>{ if(i>0) e.remove(); });
+  pk.after(lp);
+  const lift=progLift||names[0];
+  const sessions=(DB[progWorkout]||[]).filter(s=>s.lifts[lift]&&!s.lifts[lift].skipped);
+  const pts=sessions.map(s=>({label:fmtDate(s.date), val:e1rm(progWorkout,s.lifts[lift])})).filter(p=>p.val!=null);
+  // PB cards
+  const vals=pts.map(p=>p.val);
+  const best=vals.length?Math.max(...vals):null, cur=vals.length?vals[vals.length-1]:null;
+  const first=vals.length?vals[0]:null;
+  $('pbcards').innerHTML = vals.length?`
+    <div class="pbcard"><div class="l">current e1RM</div><div class="v">${cur.toFixed(0)}</div></div>
+    <div class="pbcard"><div class="l">best (PB)</div><div class="v" style="color:var(--green)">${best.toFixed(0)}</div></div>
+    <div class="pbcard"><div class="l">since first</div><div class="v" style="color:${cur>=first?'var(--green)':'var(--red)'}">${(cur-first>=0?'+':'')+(cur-first).toFixed(0)}</div></div>`:'';
+  $('chartnote').textContent = vals.length? 'Estimated 1RM (load × reps, Epley) for '+displayName(progWorkout,lift)+'. Green dot = PB. Load-independent so load changes read as one line.' : 'No data yet for '+displayName(progWorkout,lift)+' — log a session.';
+  drawChart(pts);
+}
+function drawChart(pts){
+  const cv=$('chart'), dpr=window.devicePixelRatio||1;
+  const W=cv.clientWidth||600, H=300; cv.width=W*dpr; cv.height=H*dpr;
+  const g=cv.getContext('2d'); g.scale(dpr,dpr); g.clearRect(0,0,W,H);
+  const cs=getComputedStyle(document.body); const fg=cs.color;
+  const muted='#a6aebc', green='#39d67f', pink='#ff6fa0';
+  if(!pts.length){ return; }
+  const padL=38,padR=12,padT=16,padB=28, w=W-padL-padR, h=H-padT-padB;
+  const vals=pts.map(p=>p.val); let mn=Math.min(...vals), mx=Math.max(...vals);
+  if(mn===mx){ mn-=5; mx+=5; } const rng=mx-mn; mn-=rng*0.12; mx+=rng*0.12;
+  const X=i=>padL+(pts.length===1?w/2:w*i/(pts.length-1));
+  const Y=v=>padT+h-(h*(v-mn)/(mx-mn));
+  // gridlines + y labels
+  g.strokeStyle='rgba(136,136,136,0.18)'; g.fillStyle=muted; g.font='10px -apple-system,sans-serif'; g.textAlign='right';
+  for(let k=0;k<=4;k++){ const v=mn+(mx-mn)*k/4, y=Y(v); g.beginPath(); g.moveTo(padL,y); g.lineTo(W-padR,y); g.stroke(); g.fillText(v.toFixed(0),padL-5,y+3); }
+  // line
+  const best=Math.max(...vals);
+  g.strokeStyle=pink; g.lineWidth=2; g.beginPath(); pts.forEach((p,i)=>{ const x=X(i),y=Y(p.val); i?g.lineTo(x,y):g.moveTo(x,y); }); g.stroke();
+  // points + x labels
+  g.textAlign='center';
+  pts.forEach((p,i)=>{ const x=X(i),y=Y(p.val); const pb=p.val===best;
+    g.fillStyle=pb?green:pink; g.beginPath(); g.arc(x,y,pb?5:3.5,0,7); g.fill();
+    if(pts.length<=8||i===0||i===pts.length-1||pb){ g.fillStyle=muted; g.fillText(p.label,x,H-10); }
+  });
+}
+
+// ===== boot =====
+loadDraft(current); buildTabs(); switchView();
+</script>
+</body>
+</html>
