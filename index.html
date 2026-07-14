@@ -226,11 +226,11 @@
   </div>
 </div></dialog>
 
-<input type="file" id="fileIn" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="fileIn" accept="image/*" style="display:none">
 
 <script>
 // ===== auto-updater: bump APP_BUILD on every release =====
-const APP_BUILD = 1;
+const APP_BUILD = 2;
 (function(){
   try{
     fetch(location.pathname + '?_=' + Date.now(), {cache:'no-store'})
@@ -291,9 +291,18 @@ function jload(k,f){ try{ const d=JSON.parse(localStorage.getItem(k)); return d=
 let DB = jload(K_SESS, JSON.parse(JSON.stringify(SEED)));
 let IMG = jload(K_IMG, {});
 let NAMES = jload(K_NAMES, {});   // { "Workout::Canonical": "Custom display name" } — display only, data keys stay canonical
-function saveDB(){ localStorage.setItem(K_SESS, JSON.stringify(DB)); }
-function saveIMG(){ localStorage.setItem(K_IMG, JSON.stringify(IMG)); }
-function saveNAMES(){ localStorage.setItem(K_NAMES, JSON.stringify(NAMES)); }
+// storage guard: never let a blocked/failed write abort the caller (Save/Copy) silently
+let storageWarned=false;
+function safeSet(k,v){
+  try{ localStorage.setItem(k,v); return true; }
+  catch(e){
+    if(!storageWarned){ storageWarned=true; try{ toast('⚠︎ Storage blocked — data won’t save. Open the Home Screen app, not a private/Brave tab.'); }catch(_){} }
+    return false;
+  }
+}
+function saveDB(){ return safeSet(K_SESS, JSON.stringify(DB)); }
+function saveIMG(){ return safeSet(K_IMG, JSON.stringify(IMG)); }
+function saveNAMES(){ return safeSet(K_NAMES, JSON.stringify(NAMES)); }
 function displayName(w,name){ return NAMES[w+'::'+name] || name; }
 
 const $=id=>document.getElementById(id);
@@ -322,7 +331,7 @@ function loadDraft(w){
   draft = (d && d.workout===w) ? d : freshDraft(w);
   counter = draft.counter||0;
 }
-function saveDraft(){ if(draft){ draft.counter=counter; localStorage.setItem(K_DRAFT, JSON.stringify(draft)); } }
+function saveDraft(){ if(draft){ draft.counter=counter; safeSet(K_DRAFT, JSON.stringify(draft)); } }
 function L(name){ if(!draft.lifts[name]) draft.lifts[name]={}; return draft.lifts[name]; }
 
 // ===== modals (promise-based) =====
@@ -752,6 +761,8 @@ function drawChart(pts){
 // ===== boot =====
 loadDraft(current); buildTabs(); switchView();
 try{ document.getElementById('sub').innerHTML += ' · <span style="opacity:.55">v'+APP_BUILD+'</span>'; }catch(e){}
+// storage health check on launch — warn early if this browser won't persist
+(function(){ try{ localStorage.setItem('slog_probe','1'); localStorage.removeItem('slog_probe'); }catch(e){ setTimeout(()=>{ try{ toast('⚠︎ Storage is blocked here — open the Home Screen app so your lifts save'); }catch(_){} }, 600); } })();
 </script>
 </body>
 </html>
