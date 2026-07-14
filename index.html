@@ -612,7 +612,7 @@ function cleanLift(w,name,li){
   if(w.type==='free'){ if(!li.note) return null; o.note=li.note; }
   else {
     if(!li.l1&&!li.l2&&!li.l3&&li.status!=='skipped') return null;
-    const t=(w.type==='heavy')?targetOf(w,name):null;
+    const t=(w.type==='heavy')?targetOf(current,name):null;
     [1,2,3].forEach(n=>{ o['l'+n]=li['l'+n]||''; o['r'+n]=li['r'+n]||(t&&li['l'+n]?String(t):''); });
   }
   if(li.order) o.order=li.order;
@@ -657,11 +657,16 @@ function sessionText(w,s){
   }
   return out;
 }
-$('copy').onclick=()=>{
+$('copy').onclick=async()=>{
   const w=WORKOUTS[current], lifts={};
   Object.keys(draft.lifts).forEach(n=>{ const c=cleanLift(w,n,draft.lifts[n]); if(c) lifts[n]=c; });
   if(!Object.keys(lifts).length){ toast('Nothing to copy'); return; }
-  openData('Paste to Claude for STRENGTH_LOG', sessionText(current,{date:draft.date,lifts}), false);
+  const text=sessionText(current,{date:draft.date,lifts});
+  // one-tap: write straight to the clipboard; only fall back to the manual dialog if the API is blocked
+  let ok=false;
+  try{ await navigator.clipboard.writeText(text); ok=true; }catch(e){}
+  if(ok) toast('Copied for Claude ✓ — paste it to Claude');
+  else openData('Select all & copy, then paste to Claude', text, false);
 };
 $('data').onclick=()=>openData('Backup / Restore (JSON)', JSON.stringify({DB,IMG,NAMES},null,1), true);
 function openData(title,text,imp){ $('dataTitle').textContent=title; $('dataText').value=text; $('dataImport').style.display=imp?'block':'none'; $('dataDlg').showModal(); }
