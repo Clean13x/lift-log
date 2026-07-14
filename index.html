@@ -230,7 +230,7 @@
 
 <script>
 // ===== auto-updater: bump APP_BUILD on every release =====
-const APP_BUILD = 3;
+const APP_BUILD = 4;
 (function(){
   try{
     fetch(location.pathname + '?_=' + Date.now(), {cache:'no-store'})
@@ -658,10 +658,16 @@ function sessionText(w,s){
   return out;
 }
 $('copy').onclick=async()=>{
-  const w=WORKOUTS[current], lifts={};
+  const w=WORKOUTS[current]; let lifts={}, dateForCopy=draft.date;
   Object.keys(draft.lifts).forEach(n=>{ const c=cleanLift(w,n,draft.lifts[n]); if(c) lifts[n]=c; });
+  if(!Object.keys(lifts).length){
+    // draft empty (e.g. already Saved) — fall back to the saved session for this date, else the most recent one
+    const arr=DB[current]||[];
+    const saved=arr.find(s=>s.date===draft.date)||arr[arr.length-1];
+    if(saved){ lifts=saved.lifts; dateForCopy=saved.date; }
+  }
   if(!Object.keys(lifts).length){ toast('Nothing to copy'); return; }
-  const text=sessionText(current,{date:draft.date,lifts});
+  const text=sessionText(current,{date:dateForCopy,lifts});
   // one-tap: write straight to the clipboard; only fall back to the manual dialog if the API is blocked
   let ok=false;
   try{ await navigator.clipboard.writeText(text); ok=true; }catch(e){}
