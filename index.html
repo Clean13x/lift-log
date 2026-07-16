@@ -230,7 +230,7 @@
 
 <script>
 // ===== auto-updater: bump APP_BUILD on every release =====
-const APP_BUILD = 6;
+const APP_BUILD = 7;
 (function(){
   try{
     fetch(location.pathname + '?_=' + Date.now(), {cache:'no-store'})
@@ -240,7 +240,15 @@ const APP_BUILD = 6;
         const m = t.match(/APP_BUILD\s*=\s*(\d+)/);
         if(!m) return;
         const sb = +m[1], tried = +(sessionStorage.getItem('slog_upd')||0);
-        if(sb > APP_BUILD && sb > tried){ sessionStorage.setItem('slog_upd', sb); location.replace(location.pathname + '?v=' + sb); }
+        if(sb > APP_BUILD && sb > tried){
+          sessionStorage.setItem('slog_upd', sb);
+          // update IN PLACE by rewriting the document with the freshly-fetched HTML at the SAME url.
+          // NEVER navigate to a new URL: a "?v=" query can push an iOS Home-Screen app into a
+          // different storage scope and orphan localStorage (this is what erased sessions once).
+          // same origin + same path = localStorage stays put.
+          try{ document.open(); document.write(t); document.close(); }
+          catch(e){ location.reload(); }   // fallback: plain in-place reload, still no URL change
+        }
       }).catch(()=>{});   // offline / no signal → run current version, no error
   }catch(e){}
 })();
