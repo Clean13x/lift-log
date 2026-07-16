@@ -94,6 +94,8 @@
   button.ghost { background:var(--card2); color:var(--fg); border:1px solid var(--line); }
   .hist { margin-top:26px; }
   .hist h2 { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid var(--line); padding-bottom:8px; margin:0 0 12px; }
+  .hdel { float:right; background:none; border:none; color:var(--muted); font-size:14px; line-height:1; cursor:pointer; padding:2px 4px; margin:-2px -2px 0 0; }
+  .hdel:active, .hdel:hover { color:var(--red); }
   .hsession { font-size:12px; margin-bottom:14px; padding:11px 13px; background:var(--card); border:1px solid var(--line); border-radius:12px; }
   .hsession .hdate { font-weight:700; color:var(--fg); display:block; margin-bottom:4px; }
   .hsession .hline { color:var(--muted); display:block; padding:1px 0; }
@@ -230,7 +232,7 @@
 
 <script>
 // ===== auto-updater: bump APP_BUILD on every release =====
-const APP_BUILD = 10;
+const APP_BUILD = 11;
 (function(){
   try{
     fetch(location.pathname + '?_=' + Date.now(), {cache:'no-store'})
@@ -340,13 +342,22 @@ function cloudPut(){
     }catch(e){}
   }, 400);                                 // debounce: coalesce rapid saves into one write
 }
-// union two histories by workout+date; on a same-date clash keep the richer record (more lifts)
+// union two histories by workout+date; on a same-date clash keep the richer record (more lifts).
+// DB._deleted is a tombstone list ("Workout::date") so deletions survive the additive merge and
+// even propagate across devices/cloud — otherwise a deleted session would just reappear on sync.
 function mergeDB(base, extra){
   const out = (base && typeof base==='object' && !Array.isArray(base)) ? base : {};
+  const deadArr = Array.from(new Set([
+    ...(Array.isArray(out._deleted)   ? out._deleted   : []),
+    ...(Array.isArray(extra._deleted) ? extra._deleted : [])
+  ]));
+  if(deadArr.length) out._deleted = deadArr;
+  const dead = new Set(deadArr);
   for(const w in extra){
-    if(!Array.isArray(extra[w])) continue;
+    if(w==='_deleted' || !Array.isArray(extra[w])) continue;
     if(!Array.isArray(out[w])) out[w]=[];
     extra[w].forEach(sess=>{
+      if(dead.has(w+'::'+sess.date)) return;            // never re-add a tombstoned session
       const i = out[w].findIndex(s=>s.date===sess.date);
       if(i<0){ out[w].push(sess); return; }
       const na=(out[w][i]&&out[w][i].lifts)?Object.keys(out[w][i].lifts).length:0;
@@ -356,6 +367,17 @@ function mergeDB(base, extra){
     out[w].sort((x,y)=> x.date<y.date?-1:(x.date>y.date?1:0));
   }
   return out;
+}
+// drop any session whose "Workout::date" is tombstoned (applied after seed/cloud merges, which
+// could otherwise re-introduce a deleted date). Runs every boot.
+function pruneDeleted(db){
+  const dead = new Set(Array.isArray(db && db._deleted) ? db._deleted : []);
+  if(!dead.size) return db;
+  for(const w in db){
+    if(w==='_deleted' || !Array.isArray(db[w])) continue;
+    db[w] = db[w].filter(s=> !dead.has(w+'::'+s.date));
+  }
+  return db;
 }
 
 // ===== DURABLE STORE = the SEED committed in THIS file. localStorage is only a live cache. =====
@@ -367,14 +389,18 @@ function mergeDB(base, extra){
 // current on each deploy is Claude's job (from STRENGTH_LOG), never the user's.
 function mergeSeed(db){
   if(!db || typeof db!=='object' || Array.isArray(db)) db={};
+  const dead = new Set(Array.isArray(db._deleted) ? db._deleted : []);
   for(const w in SEED){
     if(!Array.isArray(db[w])) db[w]=[];
-    SEED[w].forEach(seed=>{ if(!db[w].some(s=>s.date===seed.date)) db[w].push(JSON.parse(JSON.stringify(seed))); });
+    SEED[w].forEach(seed=>{
+      if(dead.has(w+'::'+seed.date)) return;            // don't re-seed a session the user deleted
+      if(!db[w].some(s=>s.date===seed.date)) db[w].push(JSON.parse(JSON.stringify(seed)));
+    });
     db[w].sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
   }
   return db;
 }
-let DB = mergeSeed(jload(K_SESS, {}));
+let DB = pruneDeleted(mergeSeed(jload(K_SESS, {})));
 let IMG = jload(K_IMG, {});
 let NAMES = jload(K_NAMES, {});   // { "Workout::Canonical": "Custom display name" } — display only, data keys stay canonical
 // storage guard: never let a blocked/failed write abort the caller (Save/Copy) silently
@@ -739,6 +765,7 @@ $('save').onclick=()=>{
   if(!Object.keys(lifts).length){ toast('Nothing to save'); return; }
   const s={ date:draft.date, lifts };
   DB[current]=DB[current]||[];
+  if(Array.isArray(DB._deleted)){ DB._deleted = DB._deleted.filter(k=>k!==current+'::'+s.date); }  // re-logging un-deletes
   const ex=DB[current].findIndex(x=>x.date===s.date);
   if(ex>=0) DB[current][ex]=s; else DB[current].push(s);
   DB[current].sort((a,b)=>a.date.localeCompare(b.date));
@@ -800,7 +827,7 @@ function renderHist(){
   const t=WORKOUTS[current].type;
   let html='<h2>'+current+' — history</h2>';
   arr.forEach(s=>{
-    html+='<div class="hsession"><span class="hdate">'+fmtDate(s.date)+'</span>';
+    html+='<div class="hsession"><button class="hdel" data-del-date="'+s.date+'" title="Delete this session">✕</button><span class="hdate">'+fmtDate(s.date)+'</span>';
     Object.entries(s.lifts).sort((a,b)=>(a[1].order||99)-(b[1].order||99)).forEach(([name,v])=>{
       let line;
       const dn=displayName(current,name);
@@ -818,6 +845,21 @@ function renderHist(){
     html+='</div>';
   });
   box.innerHTML=html;
+  box.querySelectorAll('[data-del-date]').forEach(b=>{
+    b.onclick=()=>deleteSession(current, b.getAttribute('data-del-date'));
+  });
+}
+
+// delete a saved session (tombstoned so it stays gone through seed/cloud merges)
+function deleteSession(w, date){
+  if(!confirm('Delete the '+w+' session from '+fmtDate(date)+'?\nThis removes it everywhere and cannot be undone.')) return;
+  DB[w] = (DB[w]||[]).filter(s=>s.date!==date);
+  if(!Array.isArray(DB._deleted)) DB._deleted=[];
+  const key = w+'::'+date;
+  if(!DB._deleted.includes(key)) DB._deleted.push(key);
+  saveDB();                       // persist locally + push reduced history (+ tombstone) to cloud
+  toast('Deleted '+w+' · '+fmtDate(date));
+  render();
 }
 
 // ===== progress / PB chart (estimated 1RM, hand-drawn) =====
@@ -915,7 +957,7 @@ try{ document.getElementById('sub').innerHTML += ' · <span style="opacity:.55">
 (function cloudSync(tries){
   cloudGet().then(res=>{
     if(res.ok){
-      DB = mergeSeed(mergeDB(DB, res.data));   // union: local + seed + cloud
+      DB = pruneDeleted(mergeSeed(mergeDB(DB, res.data)));   // union: local + seed + cloud, minus tombstones
       safeSet(K_SESS, JSON.stringify(DB));      // persist locally
       cloudReady = true;                        // safe to push now (we've seen the cloud)
       cloudPut();                               // push the reconciled union back up
