@@ -230,7 +230,7 @@
 
 <script>
 // ===== auto-updater: bump APP_BUILD on every release =====
-const APP_BUILD = 7;
+const APP_BUILD = 8;
 (function(){
   try{
     fetch(location.pathname + '?_=' + Date.now(), {cache:'no-store'})
@@ -259,7 +259,7 @@ const WORKOUTS = {
   "Volume Lower": { type:"amrap", lifts:["RDL","Farmer Carry","Leg Press","Leg Extension","Leg Curl"] },
   "Heavy Upper":  { type:"heavy", lifts:[["Bench",5],["Pullups",6],["Shoulder",6],["Decline",6],["Barbell Curl",7],["Chest Press",6],["Pec Fly",7],["Triceps",6]] },
   "Heavy Lower":  { type:"heavy", lifts:[["RDL",6],["Leg Press",6],["Leg Extension",6],["Shoulder Shrug",6],["Leg Curl",6]] },
-  "Abs":          { type:"free", lifts:[] }
+  "Abs":          { type:"heavy", lifts:[["Abdominal Crunch",15],["Back Extension",15],["Rotary Torso",20]] }
 };
 const ORDER = ["Volume Upper","Volume Lower","Heavy Upper","Heavy Lower","Abs","Progress"];
 function liftNames(w){ return WORKOUTS[w].lifts.map(l=>Array.isArray(l)?l[0]:l); }
@@ -291,7 +291,10 @@ const SEED = {
     "RDL":{l1:"225",r1:"6",l2:"245",r2:"6",l3:"265",r3:"4",order:1}, "Leg Press":{l1:"300",r1:"6",l2:"310",r2:"6",l3:"320",r3:"6",order:2},
     "Leg Extension":{l1:"245",r1:"6",l2:"248",r2:"6",l3:"248",r3:"6",order:3}, "Shoulder Shrug":{l1:"175",r1:"6",l2:"175",r2:"6",l3:"175",r3:"6",order:4},
     "Leg Curl":{l1:"130",r1:"6",l2:"125",r2:"6",l3:"125",r3:"6",order:5} }}],
-  "Abs": []
+  "Abs": [{ date:"2026-07-16", lifts:{
+    "Abdominal Crunch":{l1:"248",r1:"15",l2:"248",r2:"15",l3:"248",r3:"15",order:1},
+    "Back Extension":{l1:"230",r1:"15",l2:"230",r2:"15",l3:"230",r3:"15",order:2},
+    "Rotary Torso":{l1:"207",r1:"20",l2:"207",r2:"20",l3:"207",r3:"20",order:3} }}]
 };
 
 const K_SESS='slog_sessions_v3', K_IMG='slog_images_v2', K_DRAFT='slog_draft_v3', K_NAMES='slog_names_v1';
@@ -805,6 +808,20 @@ if(!localStorage.getItem('slog_mig_pu')){
   (DB["Heavy Upper"]||[]).forEach(s=>{ if(s.lifts && s.lifts["Assisted Pullups"]){ delete s.lifts["Assisted Pullups"]; changed=true; } });
   if(changed) saveDB();
   safeSet('slog_mig_pu','1');
+}
+
+// ===== one-time migration: seed the Jul 16 Abs session into existing saved data =====
+// (Abs went from free-form to a fixed 3-lift template; localStorage predates it, so inject once.)
+if(!localStorage.getItem('slog_mig_abs')){
+  if(!Array.isArray(DB["Abs"])) DB["Abs"]=[];
+  if(!DB["Abs"].some(s=>s.date==="2026-07-16")){
+    DB["Abs"].push({ date:"2026-07-16", lifts:{
+      "Abdominal Crunch":{l1:"248",r1:"15",l2:"248",r2:"15",l3:"248",r3:"15",order:1},
+      "Back Extension":{l1:"230",r1:"15",l2:"230",r2:"15",l3:"230",r3:"15",order:2},
+      "Rotary Torso":{l1:"207",r1:"20",l2:"207",r2:"20",l3:"207",r3:"20",order:3} }});
+    saveDB();
+  }
+  safeSet('slog_mig_abs','1');
 }
 
 // ===== boot =====
