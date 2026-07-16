@@ -230,7 +230,7 @@
 
 <script>
 // ===== auto-updater: bump APP_BUILD on every release =====
-const APP_BUILD = 8;
+const APP_BUILD = 10;
 (function(){
   try{
     fetch(location.pathname + '?_=' + Date.now(), {cache:'no-store'})
@@ -286,11 +286,20 @@ const SEED = {
     "Shoulder":{l1:"125",r1:"6",l2:"120",r2:"6",l3:"120",r3:"6",order:3}, "Decline":{l1:"140",r1:"6",l2:"160",r2:"6",l3:"150",r3:"6",order:4},
     "Barbell Curl":{l1:"60",r1:"7",l2:"60",r2:"7",l3:"60",r3:"7",order:5}, "Chest Press":{l1:"130",r1:"6",l2:"140",r2:"6",l3:"140",r3:"6",order:6},
     "Pec Fly":{l1:"160",r1:"7",l2:"160",r2:"7",l3:"160",r3:"7",order:7},
-    "Triceps":{skipped:true,skipReason:"busy"}, "Lat Pulldown":{l1:"150",r1:"6",l2:"170",r2:"6",l3:"190",r3:"6",order:8} }}],
+    "Triceps":{skipped:true,skipReason:"busy"}, "Lat Pulldown":{l1:"150",r1:"6",l2:"170",r2:"6",l3:"190",r3:"6",order:8} }},
+  { date:"2026-07-15", lifts:{
+    "Bench":{l1:"205",r1:"3",l2:"205",r2:"5",l3:"205",r3:"5",order:1}, "Pullups":{l1:"185",r1:"6",l2:"185",r2:"7",l3:"185",r3:"6",order:2},
+    "Shoulder":{l1:"120",r1:"6",l2:"120",r2:"6",l3:"120",r3:"6",order:3}, "Decline":{l1:"150",r1:"6",l2:"160",r2:"6",l3:"160",r3:"7",order:4},
+    "Barbell Curl":{l1:"60",r1:"10",l2:"60",r2:"11",l3:"60",r3:"12",order:5}, "Chest Press":{l1:"140",r1:"6",l2:"150",r2:"6",l3:"155",r3:"8",order:6},
+    "Pec Fly":{l1:"160",r1:"7",l2:"165",r2:"7",l3:"165",r3:"9",order:7}, "Triceps":{skipped:true,skipReason:"busy"} }}],
   "Heavy Lower": [{ date:"2026-07-07", lifts:{
     "RDL":{l1:"225",r1:"6",l2:"245",r2:"6",l3:"265",r3:"4",order:1}, "Leg Press":{l1:"300",r1:"6",l2:"310",r2:"6",l3:"320",r3:"6",order:2},
     "Leg Extension":{l1:"245",r1:"6",l2:"248",r2:"6",l3:"248",r3:"6",order:3}, "Shoulder Shrug":{l1:"175",r1:"6",l2:"175",r2:"6",l3:"175",r3:"6",order:4},
-    "Leg Curl":{l1:"130",r1:"6",l2:"125",r2:"6",l3:"125",r3:"6",order:5} }}],
+    "Leg Curl":{l1:"130",r1:"6",l2:"125",r2:"6",l3:"125",r3:"6",order:5} }},
+  { date:"2026-07-14", lifts:{
+    "RDL":{l1:"245",r1:"6",l2:"265",r2:"6",l3:"265",r3:"6",order:1}, "Leg Press":{l1:"300",r1:"6",l2:"310",r2:"6",l3:"325",r3:"8",order:2},
+    "Leg Extension":{l1:"248",r1:"6",l2:"248",r2:"7",l3:"248",r3:"9",order:3}, "Shoulder Shrug":{l1:"195",r1:"5",l2:"195",r2:"5",l3:"195",r3:"5",order:4},
+    "Leg Curl":{l1:"125",r1:"6",l2:"125",r2:"7",l3:"125",r3:"9",order:5} }}],
   "Abs": [{ date:"2026-07-16", lifts:{
     "Abdominal Crunch":{l1:"248",r1:"15",l2:"248",r2:"15",l3:"248",r3:"15",order:1},
     "Back Extension":{l1:"230",r1:"15",l2:"230",r2:"15",l3:"230",r3:"15",order:2},
@@ -299,7 +308,73 @@ const SEED = {
 
 const K_SESS='slog_sessions_v3', K_IMG='slog_images_v2', K_DRAFT='slog_draft_v3', K_NAMES='slog_names_v1';
 function jload(k,f){ try{ const d=JSON.parse(localStorage.getItem(k)); return d==null?f:d; }catch(e){ return f; } }
-let DB = jload(K_SESS, JSON.parse(JSON.stringify(SEED)));
+
+// ===== CLOUD STORE (the real durability layer) =====
+// A tiny Cloudflare Worker holds the whole history in KV. The app PULLS it on open
+// and PUSHES it on every save. localStorage is now just an offline cache; the SEED is a
+// last-ditch backstop. A Safari wipe is harmless — reopen and the cloud repopulates it.
+// Everything is MERGED (union by workout+date), so cloud and device can never clobber
+// each other and multi-device stays consistent.
+const CLOUD = {
+  url:   "https://lift-log-sync.marshallforces.workers.dev/",
+  token: "7f3a9c21e8b4460d95a1c6f2d0e83b74"
+};
+let cloudReady = false;         // becomes true only AFTER a successful pull — guards against
+                                // overwriting unseen remote data when offline/erroring.
+let cloudTimer = null;
+async function cloudGet(){
+  if(!CLOUD.url) return { ok:false };
+  try{
+    const r = await fetch(CLOUD.url, { headers:{ "X-Token":CLOUD.token }, cache:"no-store" });
+    if(!r.ok) return { ok:false };
+    const d = await r.json();
+    return { ok:true, data:(d && typeof d==='object' && !Array.isArray(d)) ? d : {} };
+  }catch(e){ return { ok:false }; }
+}
+function cloudPut(){
+  if(!CLOUD.url || !cloudReady) return;   // never push before we've pulled at least once
+  clearTimeout(cloudTimer);
+  cloudTimer = setTimeout(()=>{
+    try{
+      fetch(CLOUD.url, { method:"POST", headers:{ "X-Token":CLOUD.token, "Content-Type":"application/json" }, body: JSON.stringify(DB) }).catch(()=>{});
+    }catch(e){}
+  }, 400);                                 // debounce: coalesce rapid saves into one write
+}
+// union two histories by workout+date; on a same-date clash keep the richer record (more lifts)
+function mergeDB(base, extra){
+  const out = (base && typeof base==='object' && !Array.isArray(base)) ? base : {};
+  for(const w in extra){
+    if(!Array.isArray(extra[w])) continue;
+    if(!Array.isArray(out[w])) out[w]=[];
+    extra[w].forEach(sess=>{
+      const i = out[w].findIndex(s=>s.date===sess.date);
+      if(i<0){ out[w].push(sess); return; }
+      const na=(out[w][i]&&out[w][i].lifts)?Object.keys(out[w][i].lifts).length:0;
+      const nb=(sess&&sess.lifts)?Object.keys(sess.lifts).length:0;
+      if(nb>na) out[w][i]=sess;
+    });
+    out[w].sort((x,y)=> x.date<y.date?-1:(x.date>y.date?1:0));
+  }
+  return out;
+}
+
+// ===== DURABLE STORE = the SEED committed in THIS file. localStorage is only a live cache. =====
+// Safari can evict localStorage (7-day ITP, storage-scope switch between a Home-Screen app and a
+// Safari tab, key-version bumps on update) — but it can NEVER touch the HTML file on GitHub.
+// So on every load we MERGE the committed SEED into whatever the cache has (union by workout+date),
+// instead of using SEED only as an all-or-nothing fallback. Result: an eviction or an update can no
+// longer roll history backwards — anything baked into the file is always restored. Keeping SEED
+// current on each deploy is Claude's job (from STRENGTH_LOG), never the user's.
+function mergeSeed(db){
+  if(!db || typeof db!=='object' || Array.isArray(db)) db={};
+  for(const w in SEED){
+    if(!Array.isArray(db[w])) db[w]=[];
+    SEED[w].forEach(seed=>{ if(!db[w].some(s=>s.date===seed.date)) db[w].push(JSON.parse(JSON.stringify(seed))); });
+    db[w].sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
+  }
+  return db;
+}
+let DB = mergeSeed(jload(K_SESS, {}));
 let IMG = jload(K_IMG, {});
 let NAMES = jload(K_NAMES, {});   // { "Workout::Canonical": "Custom display name" } — display only, data keys stay canonical
 // storage guard: never let a blocked/failed write abort the caller (Save/Copy) silently
@@ -311,10 +386,13 @@ function safeSet(k,v){
     return false;
   }
 }
-function saveDB(){ return safeSet(K_SESS, JSON.stringify(DB)); }
+function saveDB(){ const ok = safeSet(K_SESS, JSON.stringify(DB)); cloudPut(); return ok; }
 function saveIMG(){ return safeSet(K_IMG, JSON.stringify(IMG)); }
 function saveNAMES(){ return safeSet(K_NAMES, JSON.stringify(NAMES)); }
 function displayName(w,name){ return NAMES[w+'::'+name] || name; }
+// SEED was merged into DB at load (durable-store recovery); persist the union now that saveDB exists,
+// so restored history is written back to the cache immediately — no user action required.
+saveDB();
 
 const $=id=>document.getElementById(id);
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -829,6 +907,25 @@ loadDraft(current); buildTabs(); switchView();
 try{ document.getElementById('sub').innerHTML += ' · <span style="opacity:.55">v'+APP_BUILD+'</span>'; }catch(e){}
 // storage health check on launch — warn early if this browser won't persist
 (function(){ try{ localStorage.setItem('slog_probe','1'); localStorage.removeItem('slog_probe'); }catch(e){ setTimeout(()=>{ try{ toast('⚠︎ Storage is blocked here — open the Home Screen app so your lifts save'); }catch(_){} }, 600); } })();
+
+// ===== cloud pull on open (then enable pushing) =====
+// Pull the cloud history and MERGE it into whatever's local, so an eviction/new-device shows
+// full history. Only after a SUCCESSFUL pull do we allow pushing — this prevents a transient
+// offline/error state from overwriting good cloud data. Retries a few times on failure.
+(function cloudSync(tries){
+  cloudGet().then(res=>{
+    if(res.ok){
+      DB = mergeSeed(mergeDB(DB, res.data));   // union: local + seed + cloud
+      safeSet(K_SESS, JSON.stringify(DB));      // persist locally
+      cloudReady = true;                        // safe to push now (we've seen the cloud)
+      cloudPut();                               // push the reconciled union back up
+      try{ if(current==='Progress') renderProgress(); else render(); }catch(e){}
+    } else if(tries>0){
+      setTimeout(()=>cloudSync(tries-1), 3000); // transient failure — retry, do NOT enable push
+    }
+    // if it never succeeds: local + SEED still work offline; cloud syncs on a later successful open
+  });
+})(3);
 </script>
 </body>
 </html>
