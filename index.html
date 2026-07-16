@@ -230,7 +230,7 @@
 
 <script>
 // ===== auto-updater: bump APP_BUILD on every release =====
-const APP_BUILD = 4;
+const APP_BUILD = 6;
 (function(){
   try{
     fetch(location.pathname + '?_=' + Date.now(), {cache:'no-store'})
@@ -274,7 +274,7 @@ const SEED = {
     "Leg Press":{l1:"280",r1:"7",l2:"280",r2:"9",l3:"280",r3:"16",order:3}, "Leg Extension":{l1:"225",r1:"7",l2:"225",r2:"9",l3:"225",r3:"12",order:4},
     "Leg Curl":{l1:"100",r1:"7",l2:"100",r2:"9",l3:"100",r3:"15",order:5} }}],
   "Heavy Upper": [{ date:"2026-07-08", lifts:{
-    "Bench":{l1:"205",r1:"5",l2:"205",r2:"5",l3:"205",r3:"5",order:1}, "Assisted Pullups":{l1:"10",r1:"1",l2:"5",r2:"1",l3:"5",r3:"1",order:2},
+    "Bench":{l1:"205",r1:"5",l2:"205",r2:"5",l3:"205",r3:"5",order:1},
     "Shoulder":{l1:"125",r1:"6",l2:"120",r2:"6",l3:"120",r3:"6",order:3}, "Decline":{l1:"140",r1:"6",l2:"160",r2:"6",l3:"150",r3:"6",order:4},
     "Barbell Curl":{l1:"60",r1:"7",l2:"60",r2:"7",l3:"60",r3:"7",order:5}, "Chest Press":{l1:"130",r1:"6",l2:"140",r2:"6",l3:"140",r3:"6",order:6},
     "Pec Fly":{l1:"160",r1:"7",l2:"160",r2:"7",l3:"160",r3:"7",order:7},
@@ -387,10 +387,17 @@ function switchView(){
 }
 
 // ===== log-order handling =====
-async function logNow(name){
+function recomputeCounter(){ let mx=0; Object.values(draft.lifts).forEach(l=>{ if(l.order&&l.order>mx) mx=l.order; }); counter=mx; }
+async function logNow(name, opts={}){
   const w=WORKOUTS[current]; if(w.type==='free') return;
   const li=L(name);
-  if(li.order){ return; } // already logged
+  if(li.order){                         // already logged
+    if(!opts.auto){                     // manual tap on the green pill = un-log it (undo an accidental order)
+      li.order=undefined; li.status=undefined;
+      recomputeCounter(); saveDraft(); render();
+    }
+    return;
+  }
   const names=liftNames(current);
   const idx=names.indexOf(name);
   // any earlier-in-prescribed-order lift still not logged & not yet accounted for -> ask why leapfrogged
@@ -398,11 +405,24 @@ async function logNow(name){
     const e=names[i], el=draft.lifts[e]||{};
     if(!el.order && el.status!=='skipped' && !el.deferReason){
       const r=await askReason('Why before '+e+'?', 'You are logging '+name+' before '+e+' (slot #'+(i+1)+').');
-      if(r) L(e).deferReason=r;        // Cancel = don't tag it, just continue
+      if(r===null && opts.auto){ render(); return; }  // Cancel on an auto-triggered prompt = back out, log nothing
+      if(r) L(e).deferReason=r;        // manual Cancel = don't tag it, just continue
     }
   }
   counter++; li.order=counter; li.status='done';
   saveDraft(); render();
+}
+// auto-capture ACTUAL performed order on first data entry — no order-pill tap required.
+// Fires the same leapfrog / out-of-order prompt logNow does, so jumping #3→#4 is caught and the
+// saved sequence reflects what was actually done (not the preset list order).
+let autoOrdering=false;
+async function maybeAutoOrder(name){
+  const li=L(name);
+  if(li.order || li.status==='skipped') return;      // already ordered or skipped
+  if(!(li.l1||li.l2||li.l3||li.r1||li.r2||li.r3)) return;  // no real data yet
+  if(autoOrdering) return;                            // serialize: one prompt flow at a time
+  autoOrdering=true;
+  try{ await logNow(name,{auto:true}); } finally{ autoOrdering=false; }
 }
 async function skipLift(name){
   const li=L(name);
@@ -551,6 +571,7 @@ function amrapCard(name,i,prev){
     if(li.r2 && +li.r2<9){ flag.className='flag ceil'; flag.textContent+=' · set2<9'; }
   };
   f.querySelectorAll('input').forEach(i=>i.addEventListener('input',rc)); rc();
+  f.querySelectorAll('input').forEach(i=>i.addEventListener('change',()=>maybeAutoOrder(name)));
   return el;
 }
 
@@ -584,6 +605,7 @@ function heavyCard(name,i,prev){
     else { flag.className='flag down'; flag.textContent='▼ e1RM '+cur.toFixed(0); }
   };
   f.querySelectorAll('input').forEach(i=>i.addEventListener('input',rc)); rc();
+  f.querySelectorAll('input').forEach(i=>i.addEventListener('change',()=>maybeAutoOrder(name)));
   return el;
 }
 
@@ -767,6 +789,14 @@ function drawChart(pts){
     g.fillStyle=pb?green:pink; g.beginPath(); g.arc(x,y,pb?5:3.5,0,7); g.fill();
     if(pts.length<=8||i===0||i===pts.length-1||pb){ g.fillStyle=muted; g.fillText(p.label,x,H-10); }
   });
+}
+
+// ===== one-time migration: drop the orphan Heavy Upper "Assisted Pullups" (now logged as unassisted "Pullups") =====
+if(!localStorage.getItem('slog_mig_pu')){
+  let changed=false;
+  (DB["Heavy Upper"]||[]).forEach(s=>{ if(s.lifts && s.lifts["Assisted Pullups"]){ delete s.lifts["Assisted Pullups"]; changed=true; } });
+  if(changed) saveDB();
+  safeSet('slog_mig_pu','1');
 }
 
 // ===== boot =====
